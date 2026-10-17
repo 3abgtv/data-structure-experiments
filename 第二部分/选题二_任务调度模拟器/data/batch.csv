@@ -1,0 +1,6 @@
+task_id,name,arrival_time,burst_time,priority
+B1,开机自检,0,3,1
+B2,加载配置,1,2,2
+B3,夜间备份,12,5,3
+B4,数据校验,13,3,2
+B5,清理缓存,20,2,1

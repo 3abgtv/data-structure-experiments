@@ -1,0 +1,5 @@
+task_id,name,arrival_time,burst_time,priority
+P1,长任务,0,8,1
+P2,中任务,0,4,2
+P3,短任务,0,2,3
+P4,微任务,0,1,4

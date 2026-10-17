@@ -1,0 +1,7 @@
+task_id,name,arrival_time,burst_time,priority
+Q1,后台任务,0,3,9
+Q2,普通任务,1,2,5
+Q3,紧急任务,2,4,1
+Q4,低优任务,3,2,8
+Q5,高优任务,4,1,2
+Q6,普通任务B,5,3,5

@@ -1,0 +1,9 @@
+{
+  "name": "任务书示例数据的 JSON 版本",
+  "tasks": [
+    {"task_id": "T1", "name": "任务A", "arrival_time": 0, "burst_time": 5, "priority": 2},
+    {"task_id": "T2", "name": "任务B", "arrival_time": 1, "burst_time": 3, "priority": 1},
+    {"task_id": "T3", "name": "任务C", "arrival_time": 2, "burst_time": 1, "priority": 3},
+    {"task_id": "T4", "name": "任务D", "arrival_time": 4, "burst_time": 2, "priority": 1}
+  ]
+}
