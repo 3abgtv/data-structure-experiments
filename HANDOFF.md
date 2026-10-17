@@ -93,3 +93,14 @@ HANDOFF.md                         本文件
 ```
 
 两个项目都已整理归位，各自独立可运行；根目录只保留索引与课程资料。
+
+## 代码仓库
+
+已推送到 GitHub（**私有**仓库，可随时改为公开）：
+
+**https://github.com/3abgtv/data-structure-experiments**
+
+- 分支：`main`
+- 未纳入仓库：`课程资料/`（任务书原文与解读，见 `.gitignore`）、`__pycache__/`
+- 改为公开：`gh repo edit 3abgtv/data-structure-experiments --visibility public --accept-visibility-change-consequences`
+- 后续更新：在根目录 `git add -A && git commit -m "..." && git push`
