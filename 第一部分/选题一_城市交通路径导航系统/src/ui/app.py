@@ -273,6 +273,8 @@ class NavigationApp:
         self.target_var.set(self.graph.name_of(self.target))
 
         self.view.load(self.graph)
+        # load() 会清空画布上的起终点标记，必须把刚选好的那对重新画上
+        self.view.set_endpoints(self.source, self.target)
         self.panel.clear()
         self.panel.clear_comparison()
         self._reset_buttons()
@@ -577,7 +579,7 @@ class NavigationApp:
                 text=f"完成：{self.graph.name_of(route.path[0])} → "
                      f"{self.graph.name_of(route.path[-1])}，"
                      f"{route.distance:.3f} km，换乘 {route.transfers} 次，"
-                     f"访问 {stats.settled} 个站点，耗时 {stats.milliseconds:.3f} ms")
+                     f"访问 {stats.unique_settled} 个站点，耗时 {stats.milliseconds:.3f} ms")
         else:
             self.status.configure(text=route.message)
 
@@ -637,6 +639,7 @@ class NavigationApp:
                 "transfers": route.transfers if route.found else None,
                 "settled": stats.unique_settled,
                 "elapsed": stats.milliseconds,
+                "_legs": tuple((leg.line_id, tuple(leg.stations)) for leg in route.legs),
             })
 
         reachable = [r for r in rows if r["distance"] is not None]
@@ -655,10 +658,16 @@ class NavigationApp:
 
         parts: list[str] = []
         distinct_distances = {round(r["distance"], 6) for r in reachable}
-        if len(distinct_distances) == 1:
+        distinct_paths = {r["_legs"] for r in reachable}
+        if len(distinct_paths) == 1:
             parts.append(
-                f"三种算法给出同一条路径（{shortest['distance']:.3f} km，"
+                f"{len(reachable)} 种算法给出同一条路径（{shortest['distance']:.3f} km，"
                 f"换乘 {shortest['transfers']} 次）—— 本例中最少换乘与最短路径恰好一致")
+        elif len(distinct_distances) == 1:
+            transfers = "、".join(f"{r['algo']} {r['transfers']} 次" for r in reachable)
+            parts.append(
+                f"{len(reachable)} 种算法路程相同（{shortest['distance']:.3f} km），"
+                f"但路径不同：{transfers}换乘")
         else:
             parts.append(f"{shortest['algo']} 路程最短（{shortest['distance']:.3f} km）")
 

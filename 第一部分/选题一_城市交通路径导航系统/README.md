@@ -70,9 +70,12 @@ py run.py
 
 程序启动时自动扫描 `data/` 目录下的 `*/network.json`：
 
+- `guangzhou`（310 站 / 21 线 / 371 段区间）：**真实的广州地铁网络**（含广佛线），由 OpenStreetMap 的线路关系直接还原，站序、换乘关系与官方线网一致，转换脚本见下；
 - `beijing`（224 站 / 11 线 / 248 段区间）：**真实的北京地铁主干网络**，由公开站点数据经几何方法还原线路顺序与换乘关系得到，转换脚本见下；
 - `metro`（65 站 / 9 线 / 72 段区间）：构造网络，一条环线 + 4 条穿心直径线 + 4 条外围线；
 - `demo`（14 站 / 4 线）：故意把 1 号线的"山前"一站抬高绕远，构造出"最短"与"最少换乘"分歧的场景；另含一个不连线的"孤岛站"，用于演示不连通时的异常处理。
+
+广州数据只保留每条线路的**极大交路**（短交路是其它交路的站点子集，直接丢弃）。有分叉或分段运营的线路因此成为多条：3 号线主线 + 天河客运站—海傍贯通交路、14 号线主线 + 知识城支线、12 号线东段 / 西段（当前仍分段运营）。这样天河客运站到海傍是 0 次换乘的直达，符合实际运营。11 号线是环线，站点序列首尾都是赤沙，图里因此存在闭合边。
 
 `data/` 下的任何新目录只要包含 `network.json`，启动时都会出现在数据集下拉框里，不需要改任何代码。字段说明见下。
 
@@ -112,6 +115,14 @@ py tools/import_real_metro.py
 数据源在 `tools/source/beijing_subway_station.csv`（取自 Wikipedia 与 OpenStreetMap）。原始数据有两个问题，脚本里都做了处理：**站点没有线路顺序**（用最近邻链 + 2-opt 还原，还原出的 1、2、4、10、13 号线站序与实际完全一致）、**换乘站只记录了一次**（用几何插值补回，共 36 处）。另外还识别并剔除了 10 个坐标明显有误的站点。
 
 处理后的网络只保留最大连通分量——S1 线、西郊线等远郊线与主网之间本来就是弱连接，其换乘关系没能完整还原。详细过程见实验报告 4.4 节。
+
+广州地铁走的是另一条路线——OSM 的线路关系本身就带行车顺序和站名，不需要几何还原：
+
+```bash
+py tools/import_guangzhou_metro.py
+```
+
+数据源在 `tools/source/guangzhou_osm_stops.json`（Overpass API 于 2026-10-18 抓取的 `route=subway` + `network=广州地铁` 关系，许可 ODbL）。脚本会合并上下行、排除快车、从交路里剥离支线、按站名合并换乘站，并校验同名站点的坐标离散度。重新抓取时把文件开头的 Overpass 查询粘贴到 https://overpass-api.de/api/interpreter 即可。
 
 ## 测试
 
@@ -170,6 +181,7 @@ src/
     control_panel.py        结果面板（统计、换乘指引、算法对比表）
     theme.py                配色与字体
 data/
+  guangzhou/network.json    广州地铁（真实数据还原，310 站 / 21 线）
   beijing/network.json      北京地铁主干（真实数据还原，224 站）
   metro/network.json        示例市地铁网（构造，65 站）
   demo/network.json         演示网络（14 站，含孤立站）
@@ -178,9 +190,10 @@ tests/
   benchmark.py              性能对比实验
 tools/
   gen_network.py            构造数据的生成脚本
-  import_real_metro.py      真实地铁数据的转换脚本
+  import_real_metro.py      北京地铁数据的转换脚本
+  import_guangzhou_metro.py 广州地铁数据的转换脚本
   trace_algorithms.py       算法推演日志（讲解文档的数据来源）
-  source/                   真实数据源（北京地铁站点 CSV）
+  source/                   真实数据源（北京 CSV、广州 OSM 原始响应）
 docs/
   实验报告.md               五章实践报告
   算法过程讲解.md           三个算法的逐步推演与原理说明

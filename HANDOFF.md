@@ -8,9 +8,9 @@
 
 Python 3.14 + Tkinter，三层解耦（`graph.py` / `solver.py` / `ui/`），三种算法（Dijkstra、A\*、最少换乘 BFS），界面支持网络图缩放平移、搜索动画、路径高亮、换乘指引、三算法对比、不连通报错、动态增删。
 
-三份数据：`beijing`（224 站 / 11 线，**真实的北京地铁主干**，由公开站点数据几何还原）、`metro`（65 站，构造）、`demo`（14 站，手工设计含孤立站）。
+四份数据：`guangzhou`（310 站 / 21 线，**真实的广州地铁全网含广佛线**，由 OpenStreetMap 线路关系直接还原）、`beijing`（224 站 / 11 线，**真实的北京地铁主干**，由公开站点数据几何还原）、`metro`（65 站，构造）、`demo`（14 站，手工设计含孤立站）。
 
-验证：`tests/test_algorithms.py`（9 组 3060 断言）、`tests/test_ui.py`（5 组 52 断言）全部通过。文档：`docs/实验报告.md`（五章）、`docs/算法过程讲解.md`（逐步推演，数据来自 `tools/trace_algorithms.py`）、7 张截图。
+验证：`tests/test_algorithms.py`（9 组 3060 断言）、`tests/test_guangzhou.py`（5 组 1884 断言）、`tests/test_ui.py`（5 组 52 断言）全部通过。文档：`docs/实验报告.md`（五章）、`docs/算法过程讲解.md`（逐步推演，数据来自 `tools/trace_algorithms.py`）、7 张截图。
 
 **做过一轮 23 agent 的独立审查**，核心算法无缺陷，修复了 8 个问题（其中一个是动画进行中切换算法会让按钮永久卡死的交互 bug，一个是数据不变量未校验导致 A\* 静默次优）。
 
@@ -70,12 +70,22 @@ Python 3.14 + Tkinter，三层解耦（`graph.py` / `solver.py` / `ui/`），三
 - 选题二的模型按任务书要求不计上下文切换开销（但换人次数会统计出来）。
 - 两个项目的通用限制见各自报告的"局限与改进方向"一节。
 
+**广州数据集（2026-10-18 新增）**：`tools/import_guangzhou_metro.py` 读取 `tools/source/guangzhou_osm_stops.json`（Overpass API 抓取的 `route=subway` + `network=广州地铁` 关系，ODbL），合并上下行、排除快车、只保留**极大交路**、按站名合并换乘站，输出 `data/guangzhou/network.json`（310 站 / 21 线 / 385 区间 / 78 换乘站）。有分叉或分段运营的线路成为多条：3 号线主线 + 天河客运站—海傍贯通交路、14 号线 + 知识城支线、12 号线东/西段。11 号线为闭合环线（首尾重复赤沙）。界面自动发现，默认数据集会因站最多而变为广州。
+
+**广州数据的一轮 4 agent 独立审查**（2026-10-18）发现 15 条，已修复：
+- 3 号线原先被拆成"主线 + 6 站支线"，导致天河客运站—番禺广场/海傍被多算 1 次换乘；改为保留 OSM 里的 20 站贯通交路，最少换乘恢复 0 次；
+- 支线剥离函数 `branch_of` 在多偏离区块时会丢站、`canonical` 无法去重反向环线：整体改为"极大交路"模型，函数删除；
+- 同名站合并校验用质心距离，阈值实际放宽到约 1 km：改为最大两两距离；
+- 源数据缺节点/缺站名从静默跳过改为拒绝生成；颜色收集补 `ref` 保护；排序键加入站序，重新抓取时输出更稳定；
+- 界面三个既有 bug：切换数据集后画布不画起终点标记、BFS 状态栏把状态数当站点数、算法对比摘要仅凭距离宣称"同一条路径"（现改为比较实际乘车分段）。
+未修（记录为已知限制）：统一绕行系数 1.15 使部分线路里程偏高约 10%；并行线路在画布上重叠后画的遮住先画的；等长并行边可能产生多余换乘指引（Dijkstra/A\* 只优化距离）。
+
 ## 复现命令
 
 ```bash
 # 第一部分（选题一）
 cd 第一部分/选题一_城市交通路径导航系统
-py run.py && py tests/test_algorithms.py && py tests/test_ui.py && py tools/trace_algorithms.py
+py run.py && py tests/test_algorithms.py && py tests/test_guangzhou.py && py tests/test_ui.py && py tools/trace_algorithms.py
 
 # 第二部分（选题二）
 cd 第二部分/选题二_任务调度模拟器
