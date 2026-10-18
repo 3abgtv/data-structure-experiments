@@ -17,7 +17,7 @@ import math
 from dataclasses import dataclass, field
 
 
-@dataclass(slots=True)
+@dataclass
 class Vertex:
     """站点，即图 G=(V,E) 中的顶点 v。
 
@@ -44,7 +44,7 @@ class Vertex:
         return math.hypot(self.x - other.x, self.y - other.y)
 
 
-@dataclass(slots=True)
+@dataclass
 class Edge:
     """邻接表中的一条出边。
 
@@ -61,7 +61,7 @@ class Edge:
     minutes: float
 
 
-@dataclass(slots=True)
+@dataclass
 class Line:
     """一条地铁/公交线路。
 
@@ -82,7 +82,7 @@ class Line:
     detour: float = 1.12
 
 
-@dataclass(slots=True)
+@dataclass
 class Leg:
     """路径中"在同一线路上连续乘坐"的一段，用于生成换乘指引。"""
 
@@ -94,7 +94,7 @@ class Leg:
     minutes: float
 
 
-@dataclass(slots=True)
+@dataclass
 class Route:
     """一次搜索的最终结果。"""
 
@@ -112,7 +112,7 @@ class Route:
         return max(0, len(self.path) - 1)
 
 
-@dataclass(slots=True)
+@dataclass
 class SearchStats:
     """搜索过程的统计量，用于性能对比与搜索动画。"""
 

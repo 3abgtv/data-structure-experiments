@@ -50,6 +50,8 @@ Python 3.14 + Tkinter，三层解耦（`graph.py` / `solver.py` / `ui/`），三
 
 **语言选 Python + Tkinter**（两个选题共用）：任务书推荐"Python (Tkinter/PyQt) 或 C++ (Qt)"。本机 `py` 为 Python 3.14.3、Tkinter 就绪，而**没有任何 C++ 编译器在 PATH 中**，Qt 未安装。若课程强制 C++/Qt，需先装工具链后重做。
 
+**Python 版本按 3.8+ 兼容**：原先第一部分 `src/models.py` 用了 `@dataclass(slots=True)`（3.10+ 特性），在 3.9/3.8 上导入即抛 `TypeError: dataclass() got an unexpected keyword argument 'slots'`。已移除 6 处 `slots=True`（只损失少量内存优化），两个 `run.py` 启动时检查版本并给出可读提示。其余 `list[str]` / `str | Path` 注解都在 `from __future__ import annotations` 之下，3.8 不会求值。两份 README 的环境要求已同步改为 3.8+。
+
 **选题一：最少换乘的排序键用 `(换乘次数, 路程)`**。只用换乘次数时同层解不唯一，结果随堆内比较顺序漂移。
 
 **选题一：生成器 + `_AlgoClock`** 解决"动画"与"计时"的冲突（详见报告 3.5）。
@@ -62,6 +64,7 @@ Python 3.14 + Tkinter，三层解耦（`graph.py` / `solver.py` / `ui/`），三
 
 ## 待验证项 / 已知限制
 
+- **兼容性已在官方 Python 3.8.10 嵌入式发行版上实测**：第一部分 3060 条、第二部分 30627 + 2567 条断言全部通过。该发行版不含 Tkinter，界面层未在 3.8 上实跑，但已通过 3.8 语法检查，且界面测试在 3.14 上通过。
 - **两个项目的对话框都只做过程序化冒烟测试**（选题一的右键菜单与"添加线路"、选题二的添加/修改任务对话框），没有用真实鼠标点过，建议人工过一遍。
 - 截图在本机 Windows 11 上自动截取，换机器重跑字体渲染可能有差异。
 - 选题二的模型按任务书要求不计上下文切换开销（但换人次数会统计出来）。
