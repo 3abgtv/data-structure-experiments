@@ -11,12 +11,52 @@ Graph 和当前的搜索状态（哪些站点已被确定、哪些还在前沿�
 
 from __future__ import annotations
 
+import colorsys
 import tkinter as tk
 from collections.abc import Callable
 
 from ..graph import Graph
 from ..models import Route
 from . import theme
+
+
+def _parse_color(color: str) -> tuple[int, int, int] | None:
+    """把 "#RRGGBB" 解析成三元组；格式不认识时返回 None。"""
+    text = color.lstrip("#")
+    if len(text) == 3:
+        text = "".join(ch * 2 for ch in text)
+    if len(text) != 6:
+        return None
+    try:
+        return int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16)
+    except ValueError:
+        return None
+
+
+def _luma(rgb: tuple[int, int, int]) -> float:
+    """感知亮度（Rec. 709 权重），0 ~ 255。"""
+    r, g, b = rgb
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def brighten(color: str, floor: float) -> str:
+    """保证颜色至少有 ``floor`` 的亮度，不够就在 HLS 空间里提亮。
+
+    只用 L（明度）通道提亮，色相和饱和度基本不动：深蓝仍是深蓝系的鲜蓝，
+    而不是泛白的灰蓝，也不会像等比放大 RGB 那样把某个通道打爆、变成
+    #ff00ff 这种刺眼的假色。
+    """
+    rgb = _parse_color(color)
+    if rgb is None:
+        return color
+    if _luma(rgb) >= floor:
+        return color if color.startswith("#") else f"#{color}"
+    r, g, b = (ch / 255.0 for ch in rgb)
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    l = max(l, floor / 255.0)
+    s = min(1.0, s * 1.05)          # 提亮会让人眼觉得"发灰"，补一点饱和度
+    r, g, b = colorsys.hls_to_rgb(h, l, s)
+    return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
 
 
 class NetworkView(tk.Canvas):
@@ -55,6 +95,8 @@ class NetworkView(tk.Canvas):
         self._path_segments: list[tuple[str, str, str]] = []   # (from, to, line_id)
         self._source: str | None = None
         self._target: str | None = None
+        # 路径算完后的"结果态"：没走到的站点压暗，让结果自己跳出来
+        self._show_result = False
 
         # 交互回调：on_pick(站点 ID, 鼠标按键)；on_context(站点 ID, 屏幕 x, 屏幕 y)
         self.on_pick: Callable[[str, str], None] | None = None
@@ -144,6 +186,7 @@ class NetworkView(tk.Canvas):
         self._path_segments.clear()
         self._source = None
         self._target = None
+        self._show_result = False
         self._auto_fit = True
         self.graph = graph
 
@@ -186,8 +229,29 @@ class NetworkView(tk.Canvas):
 
     def _radius_of(self, vid: str) -> float:
         if self.graph is not None and self.graph.is_transfer(vid):
-            return theme.TRANSFER_RADIUS
-        return theme.STATION_RADIUS
+            radius = theme.TRANSFER_RADIUS
+        else:
+            radius = theme.STATION_RADIUS
+        # 结果态把路径上的站点缩成小铆钉：沿线站点沿用了平时的大圆点
+        # 时，会把高亮线切成一串白点，线路颜色就看不出来了。起终点
+        # 保持原尺寸，否则一眼找不到两头。
+        if self._show_result and vid in self._path_nodes \
+                and vid not in (self._source, self._target):
+            return theme.PATH_STATION_RADIUS
+        return radius
+
+    def _layout_stations(self) -> None:
+        """按当前半径重排站点圆（结果态切换时站点大小会变）。"""
+        graph = self.graph
+        if graph is None:
+            return
+        for vid, v in graph.vertices.items():
+            item = self._station_items.get(vid)
+            if item is None:
+                continue
+            sx, sy = self.to_screen(v.x, v.y)
+            radius = self._radius_of(vid)
+            self.coords(item, sx - radius, sy - radius, sx + radius, sy + radius)
 
     def _layout(self) -> None:
         """缩放 / 平移后重算所有图元的屏幕坐标。"""
@@ -205,12 +269,9 @@ class NetworkView(tk.Canvas):
                 coords.extend(self.to_screen(v.x, v.y))
             self.coords(item, *coords)
 
+        self._layout_stations()
         for vid, v in graph.vertices.items():
             sx, sy = self.to_screen(v.x, v.y)
-            radius = self._radius_of(vid)
-            item = self._station_items.get(vid)
-            if item is not None:
-                self.coords(item, sx - radius, sy - radius, sx + radius, sy + radius)
             label = self._label_items.get(vid)
             if label is not None:
                 self.coords(label, sx, sy - theme.TRANSFER_RADIUS - 7)
@@ -238,8 +299,10 @@ class NetworkView(tk.Canvas):
         self._frontier.clear()
         self._path_nodes.clear()
         self._path_segments.clear()
+        self._show_result = False
         self._destroy_route_items()
         self._update_line_emphasis()
+        self._layout_stations()
         self._paint()
         self._update_label_visibility()
 
@@ -252,10 +315,12 @@ class NetworkView(tk.Canvas):
         """把最终路径铺到画布上。"""
         self._path_nodes = list(route.path) if route.found else []
         self._path_segments = []
+        self._show_result = route.found
         if route.found:
             for leg in route.legs:
                 for a, b in zip(leg.stations, leg.stations[1:]):
                     self._path_segments.append((a, b, leg.line_id))
+        self._layout_stations()
         self._redraw_route()
         self._paint()
         self._update_line_emphasis()
@@ -283,37 +348,73 @@ class NetworkView(tk.Canvas):
             self.delete(item)
         self._route_items.clear()
 
+    def _route_runs(self) -> list[tuple[str, list[str]]]:
+        """把路径拆成"同一线路上的连续区段"。
+
+        同一条腿内的相邻区间合成一条折线再画：若逐区间画，各层（光晕
+        与深色缝隙）会在每个站点处互相覆盖，连接点冒出一串白色圆环，
+        看起来像路径被白点切断了。
+        """
+        runs: list[tuple[str, list[str]]] = []
+        for a, b, lid in self._path_segments:
+            if runs and runs[-1][0] == lid and runs[-1][1][-1] == a:
+                runs[-1][1].append(b)
+            else:
+                runs.append((lid, [a, b]))
+        return runs
+
     def _redraw_route(self) -> None:
-        """重画路径高亮：深色描边 + 线路色主线 + 亮色高光，形成轨道质感。"""
+        """重画路径高亮：光晕 + 深色缝隙 + 提亮线路色 + 同色系高光。
+
+        线路本色直接画在深色底图上时，深色线（21 号线、12 号线等）几乎
+        和背景融成一片；这里统一提亮，并在外面套一圈更亮的光晕，无论
+        算出来的是哪条线，结果都能从密密麻麻的站点里跳出来。
+        """
         self._destroy_route_items()
         graph = self.graph
         if graph is None or not self._path_segments:
             return
 
-        for a, b, lid in self._path_segments:
-            if not graph.has_vertex(a) or not graph.has_vertex(b):
+        runs: list[tuple[list[float], str]] = []
+        for lid, stations in self._route_runs():
+            coords: list[float] = []
+            for vid in stations:
+                if not graph.has_vertex(vid):
+                    coords = []
+                    break
+                vertex = graph.vertex(vid)
+                coords.extend(self.to_screen(vertex.x, vertex.y))
+            if len(coords) < 4:
                 continue
             line = graph.lines.get(lid)
-            color = line.color if line else theme.ACCENT
-            va, vb = graph.vertex(a), graph.vertex(b)
-            x1, y1 = self.to_screen(va.x, va.y)
-            x2, y2 = self.to_screen(vb.x, vb.y)
-            self._route_items.append(self.create_line(
-                x1, y1, x2, y2, fill=theme.BG, width=11,
-                capstyle=tk.ROUND, tags=("route",),
-            ))
-            self._route_items.append(self.create_line(
-                x1, y1, x2, y2, fill=color, width=6,
-                capstyle=tk.ROUND, tags=("route",),
-            ))
-            self._route_items.append(self.create_line(
-                x1, y1, x2, y2, fill=theme.NODE_ON_PATH, width=1.6,
-                capstyle=tk.ROUND, tags=("route",),
-            ))
+            runs.append((coords, line.color if line else theme.ACCENT))
 
+        # 按层而不是按线路绘制：先把所有光晕铺完，再统一铺深色缝隙、色芯
+        # 和高光。若一条线画完四层再画下一条，换乘站处后一条线的深色
+        # 缝隙会在换乘点上啃出一个个圆环。
+        layer_specs = (
+            (theme.PATH_HALO_WIDTH, lambda c: brighten(c, theme.PATH_HALO_MIN_LUMA)),
+            (theme.PATH_GAP_WIDTH, lambda c: theme.BG),
+            (theme.PATH_CORE_WIDTH, lambda c: brighten(c, theme.PATH_MIN_LUMA)),
+            (theme.PATH_HIGHLIGHT_WIDTH,
+             lambda c: brighten(c, theme.PATH_HIGHLIGHT_MIN_LUMA)),
+        )
+        for width, color_of in layer_specs:
+            for coords, base in runs:
+                self._route_items.append(self.create_line(
+                    *coords, fill=color_of(base), width=width,
+                    capstyle=tk.ROUND, joinstyle=tk.ROUND, tags=("route",),
+                ))
+
+        # 路径压在底图线路之上；站点再压回路径之上 —— 结果态的路径站点
+        # 已缩成小铆钉，不会再变成一串白球，但沿线站点的位置仍看得见。
         for item in self._route_items:
             self.tag_raise(item)
         self.tag_raise("station")
+        for vid in (self._source, self._target):
+            item = self._station_items.get(vid) if vid else None
+            if item is not None:
+                self.tag_raise(item)
         self.tag_raise("label")
 
     # ==================================================================
@@ -335,7 +436,9 @@ class NetworkView(tk.Canvas):
         elif vid == self._target:
             fill, outline, width = theme.NODE_TARGET, "#ffffff", 2.4
         elif vid in self._path_nodes:
-            fill, outline, width = theme.NODE_ON_PATH, theme.NODE_OUTLINE, 1.4
+            fill, outline, width = theme.NODE_ON_PATH, theme.NODE_OUTLINE, 1.2
+        elif self._show_result:
+            fill, outline, width = theme.NODE_DIM, theme.NODE_OUTLINE, 1.0
         elif vid in self._settled:
             fill, outline, width = theme.NODE_SETTLED, theme.NODE_OUTLINE, 1.4
         elif vid in self._frontier:

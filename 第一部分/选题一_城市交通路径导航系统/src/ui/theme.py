@@ -37,6 +37,20 @@ NODE_OUTLINE = "#0d1117"
 EDGE_DIM = "#2b3138"        # 未被路径经过的线路
 LABEL = "#a9b4c0"
 
+# ---------------------------------------------------------------- 结果路径
+# 高亮分四层叠画：亮色光晕 → 深色缝隙 → 线路色主芯 → 同色系高光。
+# 每一层都用"提亮后"的线路色：像 21 号线（#201747 深紫）这种
+# 在深色底图上几乎看不见的线，算出的路径也能一眼跳出来。
+PATH_HALO_WIDTH = 17
+PATH_GAP_WIDTH = 12
+PATH_CORE_WIDTH = 8
+PATH_HIGHLIGHT_WIDTH = 2.4
+PATH_MIN_LUMA = 160.0       # 主芯线路色的最低感知亮度
+PATH_HALO_MIN_LUMA = 205.0  # 光晕的最低感知亮度
+PATH_HIGHLIGHT_MIN_LUMA = 235.0  # 中心高光：同色系里最亮的一档
+PATH_STATION_RADIUS = 2.0   # 结果态路径上的站点缩成小铆钉
+NODE_DIM = "#39414d"        # 结果模式下没被路径经过的站点
+
 # ---------------------------------------------------------------- 字体
 FAMILY = "Microsoft YaHei UI"
 FONT_UI = (FAMILY, 10)
