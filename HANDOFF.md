@@ -8,7 +8,7 @@
 
 Python 3.14 + Tkinter，三层解耦（`graph.py` / `solver.py` / `ui/`），三种算法（Dijkstra、A\*、最少换乘 BFS）。界面支持缩放平移、搜索动画、路径高亮、换乘指引、三算法对比、不连通报错、动态增删站点/线路。
 
-四份数据：`guangzhou`（310 站 / 21 线，真实的广州地铁全网含广佛线，由 OpenStreetMap 线路关系还原）、`beijing`（224 站 / 11 线，真实的北京地铁主干，由公开站点数据几何还原）、`metro`（65 站，构造）、`demo`（14 站，手工设计含孤立站）。
+四份数据：`guangzhou`（310 站 / 21 线，真实广州地铁全网，OSM 还原）、`beijing`（224 站 / 11 线，真实北京地铁主干）、`metro`（65 站，构造）、`demo`（14 站，含孤立站）。
 
 验证：`tests/test_algorithms.py`（9 组 3060 断言）、`tests/test_guangzhou.py`（6 组 1943 断言）、`tests/test_ui.py`（5 组 52 断言）全部通过。文档：`docs/实验报告.md`（五章）、`docs/算法过程讲解.md`（数据来自 `tools/trace_algorithms.py`）、7 张截图。
 
@@ -24,6 +24,10 @@ Python 3.14 + Tkinter，三层解耦（`graph.py` / `solver.py` / `ui/`），三
 
 文档与 13 张截图已同步；全部测试通过（3060/1943/52；30627/2567/64）。
 
+**Word 实验报告（2026-11-01）**：`tools/build_word_reports.py` 把两份 `docs/实验报告.md` 排版为同名 `.docx`（各 25 页）：A4、2.54cm 页边距、宋体小四 + 1.5 倍行距、黑体标题、封面（姓名/学号留空横线）、Word 目录（已更新出页码）、页眉页码、表格 / 截图 / 代码块。依赖 `python-docx`；`--finalize` 用 Word COM 更新目录（需 `pywin32`）。
+
+**按老师模板的合并报告**：`tools/build_template_report.py` 以 `tools/template.docx`（由 .doc 转出）为基底生成根目录 `校内实训报告.docx`（46 页）：保留封面 / 小组名单 / 实践计划 / 成绩评定，任务一填选题一、任务二填选题二；原「实践记录」大表格在单元格内不能分页，改为每章一个表格框。
+
 ## 选题二：任务调度模拟器 —— 已完成
 
 同技术栈与分层（`models.py` / `scheduler.py` / `engine.py` / `ui/`），三种算法（FCFS、非抢占式优先级、时间片轮转），**逐时间单位模拟**（与任务书"单步"定义一致）。
@@ -32,40 +36,38 @@ Python 3.14 + Tkinter，三层解耦（`graph.py` / `solver.py` / `ui/`），三
 
 五份数据：`sample`（任务书示例）、`simultaneous`、`mixed`、`batch`、`priority_mix`。
 
-验证：`tests/test_scheduler.py`（17 组 30627 断言）、`tests/test_cross_check.py`（3 组，与独立参考实现比对 480 组随机用例）、`tests/test_ui.py`（8 组 64 断言）全部通过。任务书 FCFS 预期值 6.50 / 3.75 / 3.75 逐格吻合；有专门用例钉死 RR 边界规则；60 轮随机 × 3 算法 × 3 时间片的不变量检查。
+验证：`tests/test_scheduler.py`（17 组 30627 断言）、`tests/test_cross_check.py`（3 组 2567 断言，与独立参考实现比对 480 组随机用例）、`tests/test_ui.py`（8 组 64 断言）全部通过；任务书 FCFS 预期值 6.50 / 3.75 / 3.75 逐格吻合，RR 边界有专门用例。
 
 文档：`docs/实验报告.md`（五章）、6 张截图、`README.md`。
 
 做过一轮 26 agent 独立审查，修复 13 个确认问题，代表性几条：
 
 - `last_result` 未清空导致「导出结果」写出上一轮数据；RR 回队尾没把状态改回「就绪」；「修改」按钮选中后不启用；
-- `run_to_end` 达到步数上限时静默返回含未完成任务的结果（改为抛 `RuntimeError`）；
-- 堆键尾部放 `Task` 对象导致 seq 冲突时 `TypeError`；甘特图全量扫描改为索引；
+- `run_to_end` 达到步数上限时静默返回未完成任务（改为抛 `RuntimeError`）；堆键尾部放 `Task` 导致 seq 冲突；甘特图全量扫描改为索引；
 - 报告补「算法对比结果截图」、甘特图与第二章链表对比。
 
 另有 3 条经核验为误报（时间片 int 截断、甘特图合并、"开始/继续"文字），未改。
 
 ## 关键决策与原因
 
-**语言选 Python + Tkinter**：任务书推荐 Python (Tkinter/PyQt) 或 C++ (Qt)。本机 Python 3.14.3 + Tkinter 就绪，PATH 中无任何 C++ 编译器、Qt 未安装。若课程强制 C++/Qt，需先装工具链后重做。
+**语言选 Python + Tkinter**：任务书推荐 Python (Tkinter/PyQt) 或 C++ (Qt)；本机 Python 3.14.3 + Tkinter 就绪，PATH 无 C++ 编译器、Qt 未安装。若课程强制 C++/Qt，需先装工具链后重做。
 
-**Python 3.8+ 兼容**：移除第一部分 6 处 `@dataclass(slots=True)`（3.10+ 特性，在 3.9/3.8 导入即报错）；其余 `list[str]` / `str | Path` 都在 `from __future__ import annotations` 之下，3.8 不求值。两个 `run.py` 启动时检查版本。两份 README 环境要求已改 3.8+。
+**Python 3.8+ 兼容**：移除第一部分 6 处 `@dataclass(slots=True)`（3.10+ 特性）；其余 `list[str]` / `str | Path` 都在 `from __future__ import annotations` 之下。两个 `run.py` 启动时检查版本，README 已改 3.8+。
 
 **选题一：最少换乘排序键用 `(换乘次数, 路程)`**，否则同层解不唯一、随堆内顺序漂移。**生成器 + `_AlgoClock`** 解决动画与计时冲突（报告 3.5）。
 
-**选题二：逐时间单位模拟**（非事件驱动），因为任务书定义"单步 = 推进一个时间单位"，空闲区间记录也变平凡。**RR 的"回队尾"延后**到下一时间单位开头（`_pending_requeue`），顺序写反会得到完全不同的甘特图（报告 3.3 有最小例子）。**优先级堆键取 `(priority, arrival_time, seq)`**，否则相同优先级弹出顺序不可复现。
+**选题二：逐时间单位模拟**（任务书定义"单步 = 推进一个时间单位"）。**RR 的回队尾延后**到下一时间单位开头（`_pending_requeue`），顺序写反会得到不同的甘特图（报告 3.3 有例子）；**优先级堆键取 `(priority, arrival_time, seq)`**，否则同优先级顺序不可复现。
 
 ## 待验证项 / 已知限制
 
-- **Python 3.8.10 嵌入式发行版实测**：第一部分 3060 条、第二部分 30627 + 2567 条断言全部通过。该发行版不含 Tkinter，界面层未在 3.8 实跑，但已过 3.8 语法检查，界面测试在 3.14 通过。
+- **Python 3.8.10 嵌入式发行版实测**：算法与数据测试全通过；该发行版无 Tkinter，界面层未在 3.8 实跑，但已过语法检查、在 3.14 通过界面测试。
 - **两个项目的对话框只做过程序化冒烟测试**（右键菜单、添加线路、添加/修改任务），没有真实鼠标点过，建议人工过一遍。
-- 截图在本机 Windows 11 自动截取，换机器字体渲染可能有差异。新路径高亮的四层宽度按屏幕像素固定，不同 DPI 下观感可能略有差异。
-- 选题二按任务书要求不计上下文切换开销（但换人次数会统计）。
-- 通用限制见两份报告"局限与改进方向"。
+- 截图在本机 Windows 11 截取，换机器字体渲染可能有差异；路径高亮宽度按屏幕像素固定，不同 DPI 观感可能不同。选题二按任务书不计上下文切换开销。
+- 其余限制见两份报告"局限与改进方向"。
 
-**广州数据集（2026-10-18）**：`tools/import_guangzhou_metro.py` 读取 `tools/source/guangzhou_osm_stops.json`（Overpass API 抓取的 `route=subway` + `network=广州地铁` 关系，ODbL），合并上下行、排除快车、只保留极大交路、按站名合并换乘站，输出 `data/guangzhou/network.json`（310 站 / 21 线 / 385 区间 / 78 换乘站）。分叉线路成为多条：3 号线主线 + 天河客运站—海傍贯通交路、14 号线 + 知识城支线、12 号线东/西段；11 号线为闭合环线。界面自动发现，默认数据集因站最多而变为广州。
+**广州数据集（2026-10-18）**：`tools/import_guangzhou_metro.py` 读取 Overpass 抓取的 `route=subway` + `network=广州地铁` 关系（ODbL），合并上下行、排除快车、保留极大交路、按站名合并换乘站，输出 `data/guangzhou/network.json`（310 站 / 21 线 / 385 区间 / 78 换乘站）。分叉线路成为多条（3 号线贯通交路、14 号线支线、12 号线东西段），11 号线为闭合环线；界面自动发现，默认数据集变为广州。
 
-广州数据一轮 4 agent 审查（2026-10-18）修复 15 条，关键：3 号线曾拆成"主线 + 支线"导致换乘数偏大（改为 20 站贯通交路）；支线剥离改"极大交路"模型；同名站合并改按最大两两距离；界面三处 bug（切换数据集不画起终点、BFS 状态栏误报站点数、对比摘要只比距离）。未修：绕行系数 1.15 使部分里程偏高约 10%；并行线路互相遮挡；等长并行边可能产生多余换乘指引。
+广州数据一轮 4 agent 审查（2026-10-18）修复 15 条，关键：3 号线拆错支线导致换乘数偏大（改为 20 站贯通交路）；支线剥离改"极大交路"；同名站合并改按最大两两距离；界面三处 bug。未修：绕行系数 1.15 使部分里程偏高约 10%；并行线路互相遮挡；等长并行边可能产生多余换乘指引。
 
 ## 复现命令
 
@@ -82,11 +84,11 @@ py run.py && py tests/test_scheduler.py && py tests/test_cross_check.py && py te
 ## 目录结构
 
 ```
-README.md                两个选题的索引
-HANDOFF.md               本文件
-第一部分/选题一_城市交通路径导航系统/   见该目录 README.md
-第二部分/选题二_任务调度模拟器/         见该目录 README.md
-课程资料/                 任务书原文、正文提取、逐条解读
+README.md / HANDOFF.md   索引与交接
+tools/                   Word 排版脚本（build_word_reports / build_template_report / template.docx）
+第一部分/…               选题一，见该目录 README.md
+第二部分/…               选题二，见该目录 README.md
+课程资料/                 任务书原文、提取与解读
 ```
 
 ## 代码仓库
