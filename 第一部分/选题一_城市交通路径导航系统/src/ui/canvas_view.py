@@ -39,23 +39,27 @@ def _luma(rgb: tuple[int, int, int]) -> float:
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
-def brighten(color: str, floor: float) -> str:
-    """保证颜色至少有 ``floor`` 的亮度，不够就在 HLS 空间里提亮。
+def tone(color: str, target: float) -> str:
+    """把颜色亮度调向目标值，色相保持不变。
 
-    只用 L（明度）通道提亮，色相和饱和度基本不动：深蓝仍是深蓝系的鲜蓝，
-    而不是泛白的灰蓝，也不会像等比放大 RGB 那样把某个通道打爆、变成
-    #ff00ff 这种刺眼的假色。
+    浅色主题下只压暗过亮的颜色（黄色线路在白底上原本几乎看不见）；
+    深色主题下只提亮过暗的颜色。两种情况都只动 HLS 的明度通道，不会
+    像等比放大 RGB 那样把某个通道打爆、变成 #ff00ff 这种假色。
     """
     rgb = _parse_color(color)
     if rgb is None:
         return color
-    if _luma(rgb) >= floor:
-        return color if color.startswith("#") else f"#{color}"
+    lum = _luma(rgb)
+    if theme.LIGHT:
+        if lum <= target:
+            return color if color.startswith("#") else f"#{color}"
+    else:
+        if lum >= target:
+            return color if color.startswith("#") else f"#{color}"
     r, g, b = (ch / 255.0 for ch in rgb)
-    h, l, s = colorsys.rgb_to_hls(r, g, b)
-    l = max(l, floor / 255.0)
-    s = min(1.0, s * 1.05)          # 提亮会让人眼觉得"发灰"，补一点饱和度
-    r, g, b = colorsys.hls_to_rgb(h, l, s)
+    h, _l, s = colorsys.rgb_to_hls(r, g, b)
+    s = min(1.0, s * 1.08)          # 明度变化后人眼会觉得"发灰"，补一点饱和度
+    r, g, b = colorsys.hls_to_rgb(h, target / 255.0, s)
     return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
 
 
@@ -202,7 +206,7 @@ class NetworkView(tk.Canvas):
                 v = graph.vertex(vid)
                 coords.extend(self.to_screen(v.x, v.y))
             self._line_items[lid] = self.create_line(
-                *coords, fill=line.color, width=3,
+                *coords, fill=tone(line.color, theme.EDGE_MAX_LUMA), width=3,
                 capstyle=tk.ROUND, joinstyle=tk.ROUND, tags=("line", lid),
             )
 
@@ -327,21 +331,25 @@ class NetworkView(tk.Canvas):
         self._update_label_visibility()
 
     def _update_line_emphasis(self) -> None:
-        """路径确定后把没走到的线路压暗，让结果自己"跳"出来。"""
+        """路径确定后把底图线路整体压暗，让结果自己"跳"出来。
+
+        结果态不再保留"路径经过的线路"整条彩色：一条腿可能只用到某条
+        线路的一小段，整条线亮着反而和路径抢注意力。路径本身由
+        路线图层按区段重新着色，线路身份不会丢。
+        """
         graph = self.graph
         if graph is None:
             return
-        active = {lid for _, _, lid in self._path_segments}
+        active = bool(self._path_segments)
         for lid, item in self._line_items.items():
             line = graph.lines.get(lid)
             if line is None:
                 continue
-            if not active:
-                self.itemconfig(item, fill=line.color, width=3)
-            elif lid in active:
-                self.itemconfig(item, fill=line.color, width=5)
-            else:
+            if active:
                 self.itemconfig(item, fill=theme.EDGE_DIM, width=2)
+            else:
+                self.itemconfig(item, fill=tone(line.color, theme.EDGE_MAX_LUMA),
+                                width=3)
 
     def _destroy_route_items(self) -> None:
         for item in self._route_items:
@@ -364,11 +372,12 @@ class NetworkView(tk.Canvas):
         return runs
 
     def _redraw_route(self) -> None:
-        """重画路径高亮：光晕 + 深色缝隙 + 提亮线路色 + 同色系高光。
+        """重画路径高亮：轮廓 + 底色缝隙 + 调过亮度的线路色 + 高光。
 
-        线路本色直接画在深色底图上时，深色线（21 号线、12 号线等）几乎
-        和背景融成一片；这里统一提亮，并在外面套一圈更亮的光晕，无论
-        算出来的是哪条线，结果都能从密密麻麻的站点里跳出来。
+        线路本色和底图的对比度并不总够（深色底图上的深色线、浅色底图
+        上的亮黄线都看不清）；这里按主题把亮度调离危险区，并在外面套
+        一圈同色系的轮廓，无论算出哪条线，结果都能从密密麻麻的站点里
+        跳出来。
         """
         self._destroy_route_items()
         graph = self.graph
@@ -392,13 +401,19 @@ class NetworkView(tk.Canvas):
         # 按层而不是按线路绘制：先把所有光晕铺完，再统一铺深色缝隙、色芯
         # 和高光。若一条线画完四层再画下一条，换乘站处后一条线的深色
         # 缝隙会在换乘点上啃出一个个圆环。
-        layer_specs = (
-            (theme.PATH_HALO_WIDTH, lambda c: brighten(c, theme.PATH_HALO_MIN_LUMA)),
+        # 深色主题在最亮的一档上再叠一道同色高光；浅色主题不再加白线 ——
+        # 白底上它只会把彩芯又切成两条平行线，看起来像"双轨"。
+        halo = (lambda c: theme.PATH_OUTLINE if theme.PATH_OUTLINE
+                else tone(c, theme.PATH_HALO_MIN_LUMA))
+        layer_specs = [
+            (theme.PATH_HALO_WIDTH, halo),
             (theme.PATH_GAP_WIDTH, lambda c: theme.BG),
-            (theme.PATH_CORE_WIDTH, lambda c: brighten(c, theme.PATH_MIN_LUMA)),
-            (theme.PATH_HIGHLIGHT_WIDTH,
-             lambda c: brighten(c, theme.PATH_HIGHLIGHT_MIN_LUMA)),
-        )
+            (theme.PATH_CORE_WIDTH, lambda c: tone(c, theme.PATH_MIN_LUMA)),
+        ]
+        if not theme.LIGHT:
+            layer_specs.append(
+                (theme.PATH_HIGHLIGHT_WIDTH,
+                 lambda c: tone(c, theme.PATH_HIGHLIGHT_MIN_LUMA)))
         for width, color_of in layer_specs:
             for coords, base in runs:
                 self._route_items.append(self.create_line(
@@ -436,7 +451,8 @@ class NetworkView(tk.Canvas):
         elif vid == self._target:
             fill, outline, width = theme.NODE_TARGET, "#ffffff", 2.4
         elif vid in self._path_nodes:
-            fill, outline, width = theme.NODE_ON_PATH, theme.NODE_OUTLINE, 1.2
+            fill, outline, width = (theme.NODE_ON_PATH,
+                                    theme.NODE_ON_PATH_OUTLINE, 1.2)
         elif self._show_result:
             fill, outline, width = theme.NODE_DIM, theme.NODE_OUTLINE, 1.0
         elif vid in self._settled:

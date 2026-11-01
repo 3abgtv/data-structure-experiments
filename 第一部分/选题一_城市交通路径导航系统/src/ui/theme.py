@@ -1,55 +1,64 @@
 """界面配色与字体常量。
 
 集中放在一处，界面代码里不再出现散落的颜色字面量。
+当前为浅色主题；`LIGHT` 供画布判断"该提亮还是压暗"。
 """
 
 from __future__ import annotations
 
+LIGHT = True               # 浅色主题标记（路径高亮按此选择调色方向）
+
 # ---------------------------------------------------------------- 底色
-BG = "#0d1117"            # 画布底色
-BG_WINDOW = "#0d1117"     # 窗口底色
-BG_PANEL = "#161b22"      # 侧栏 / 工具栏
-BG_INPUT = "#21262d"      # 输入控件
-BORDER = "#30363d"        # 分隔线
+BG = "#ffffff"            # 画布底色
+BG_WINDOW = "#f6f8fa"     # 窗口底色
+BG_PANEL = "#ffffff"      # 侧栏 / 工具栏
+BG_INPUT = "#f6f8fa"      # 输入控件
+BORDER = "#d0d7de"        # 分隔线
+BG_STRIPE = "#f6f8fa"     # 表格斑马纹
 
 # ---------------------------------------------------------------- 文字
-TEXT = "#e6edf3"
-TEXT_MUTED = "#8b949e"
-TEXT_FAINT = "#6e7681"
+TEXT = "#1f2328"
+TEXT_MUTED = "#59636e"
+TEXT_FAINT = "#8c959f"
 
 # ---------------------------------------------------------------- 强调
-ACCENT = "#4493f8"
-ACCENT_DARK = "#1f6feb"
-SUCCESS = "#3fb950"
-DANGER = "#f85149"
-WARNING = "#d29922"
+ACCENT = "#0969da"
+ACCENT_DARK = "#0550ae"
+SUCCESS = "#1a7f37"
+DANGER = "#cf222e"
+WARNING = "#9a6700"
 
 # ---------------------------------------------------------------- 站点状态
-NODE_IDLE = "#3a4250"
-NODE_SOURCE = "#3fb950"     # 起点
-NODE_TARGET = "#f85149"     # 终点
-NODE_SETTLED = "#d29922"    # 已被算法确定
-NODE_FRONTIER = "#4493f8"   # 位于前沿（堆 / 队列中）
+NODE_IDLE = "#c9d1d9"
+NODE_SOURCE = "#1a7f37"     # 起点
+NODE_TARGET = "#cf222e"     # 终点
+NODE_SETTLED = "#bf8700"    # 已被算法确定
+NODE_FRONTIER = "#0969da"   # 位于前沿（堆 / 队列中）
 NODE_ON_PATH = "#ffffff"    # 落在最终路径上
-NODE_OUTLINE = "#0d1117"
+NODE_OUTLINE = "#ffffff"    # 站点描边取底色，把站点从线路上"切"出来
+NODE_ON_PATH_OUTLINE = "#1f2328"   # 路径上的白点用深色描边，白底上也看得清
 
 # ---------------------------------------------------------------- 地图
-EDGE_DIM = "#2b3138"        # 未被路径经过的线路
-LABEL = "#a9b4c0"
+EDGE_DIM = "#d8dee4"        # 未被路径经过的线路
+EDGE_MAX_LUMA = 165.0       # 底图线路的亮度上限：白底上也要看得见浅色线
+LABEL = "#59636e"
 
 # ---------------------------------------------------------------- 结果路径
-# 高亮分四层叠画：亮色光晕 → 深色缝隙 → 线路色主芯 → 同色系高光。
-# 每一层都用"提亮后"的线路色：像 21 号线（#201747 深紫）这种
-# 在深色底图上几乎看不见的线，算出的路径也能一眼跳出来。
-PATH_HALO_WIDTH = 17
-PATH_GAP_WIDTH = 12
+# 高亮分四层叠画：深色轮廓 → 底色缝隙 → 线路色主芯 → 亮色高光。
+# 浅色主题下把过亮的线路色压暗（`LIGHT=True` 时 tone() 只压不亮），
+# 黄色、橙色线路在白色底图上也能看清；深色线路本身已经足够醒目。
+PATH_HALO_WIDTH = 16
+PATH_GAP_WIDTH = 11.5
 PATH_CORE_WIDTH = 8
-PATH_HIGHLIGHT_WIDTH = 2.4
-PATH_MIN_LUMA = 160.0       # 主芯线路色的最低感知亮度
-PATH_HALO_MIN_LUMA = 205.0  # 光晕的最低感知亮度
-PATH_HIGHLIGHT_MIN_LUMA = 235.0  # 中心高光：同色系里最亮的一档
+PATH_HIGHLIGHT_WIDTH = 2.0
+PATH_MIN_LUMA = 155.0       # 主芯线路色的亮度上限（浅色主题）
+PATH_HALO_MIN_LUMA = 95.0   # 轮廓的亮度上限：外圈更深，衬出彩色主芯
+PATH_HIGHLIGHT_MIN_LUMA = 235.0  # 深色主题下中心高光的亮度下限
+# 浅色主题下路径外圈统一用深灰，与任何线路色都能拉开对比；
+# 深色主题置 None，让外圈改用提亮后的线路色。
+PATH_OUTLINE = "#1f2328"
 PATH_STATION_RADIUS = 2.0   # 结果态路径上的站点缩成小铆钉
-NODE_DIM = "#39414d"        # 结果模式下没被路径经过的站点
+NODE_DIM = "#c9d1d9"        # 结果模式下没被路径经过的站点（与常态同色，只是去掉彩）
 
 # ---------------------------------------------------------------- 字体
 FAMILY = "Microsoft YaHei UI"

@@ -126,7 +126,7 @@ class GanttChart(ttk.Frame):
                       filled=seg.task_id is not None)
             if seg.length * scale > 34 and seg.task_id:
                 self.canvas.create_text((x1 + x2) / 2, (top + head_h - 8) / 2 + 3,
-                                        text=seg.task_id, fill="#0d1117",
+                                        text=seg.task_id, fill=theme.ON_TASK,
                                         font=theme.FONT_TINY)
 
         # 先建一份 task_id -> 执行区间 的索引。逐任务调用 runs_of 的话，
@@ -159,7 +159,7 @@ class GanttChart(ttk.Frame):
                 self._bar(x1, y1 + 2, x2, y2 - 2, color)
                 if (end - start) * scale > 26:
                     self.canvas.create_text((x1 + x2) / 2, (y1 + y2) / 2,
-                                            text=f"{start}~{end}", fill="#0d1117",
+                                            text=f"{start}~{end}", fill=theme.ON_TASK,
                                             font=theme.FONT_TINY)
 
         # ---- 当前时刻指示线 ----
@@ -184,7 +184,7 @@ class GanttChart(ttk.Frame):
             x2 = x1 + 1
         if filled:
             self.canvas.create_rectangle(x1, y1, x2, y2, fill=color,
-                                         outline="", width=0)
+                                         outline=theme.BORDER, width=1)
         else:
             self.canvas.create_rectangle(x1, y1, x2, y2, fill=theme.IDLE,
                                          outline=theme.BORDER, dash=(3, 3))

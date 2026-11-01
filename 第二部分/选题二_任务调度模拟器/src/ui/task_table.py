@@ -43,8 +43,10 @@ class TaskTable(ttk.Frame):
             # 表格看起来就像错位了
             self.tree.column(key, width=width, minwidth=50, anchor=anchor, stretch=True)
 
-        self.tree.tag_configure("running", background="#1f3b2a", foreground=theme.SUCCESS)
-        self.tree.tag_configure("ready", background="#1b2a3d", foreground=theme.TEXT)
+        self.tree.tag_configure("running", background=theme.ROW_RUNNING_BG,
+                                foreground=theme.SUCCESS)
+        self.tree.tag_configure("ready", background=theme.ROW_READY_BG,
+                                foreground=theme.TEXT)
         self.tree.tag_configure("finished", foreground=theme.TEXT_MUTED)
         self.tree.tag_configure("odd", background=theme.BG_STRIPE)
 
