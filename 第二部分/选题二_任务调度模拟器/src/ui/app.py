@@ -1,13 +1,4 @@
-"""主窗口：把任务模型、调度引擎与各个视图组装起来。
-
-界面层只做三件事：接收用户操作、按节拍推进引擎、把状态交给各个视图渲染。
-所有调度逻辑都在 `scheduler.py` 与 `engine.py` 里，窗口本身不含任何
-"下一个该跑谁"的判断。
-
-关于动画：任务书规定"单步执行统一定义为推进一个模拟时间单位"，所以界面
-上的"单步"按钮就是调用一次 `engine.step()`；而"开始"按钮只是按演示速度
-连续调用同一个方法。两者推进的是同一个引擎，结果完全一致。
-"""
+"""主窗口：组装任务模型、调度引擎与视图，并调度演示动画。"""
 
 from __future__ import annotations
 
@@ -25,8 +16,8 @@ from .gantt import GanttChart
 from .report_panel import ReportPanel
 from .task_table import TaskTable
 
-TICK_MS = 55                     # 动画节拍
-RR_QUANTA = (1, 2, 4)            # 对比实验里要试的时间片
+TICK_MS = 55
+RR_QUANTA = (1, 2, 4)
 
 
 class SchedulerApp:
@@ -36,7 +27,7 @@ class SchedulerApp:
         self.root = root
         self.data_root = data_root
 
-        self.tasks: list[Task] = []          # 任务定义（不含运行期状态）
+        self.tasks: list[Task] = []
         self.engine: SimulationEngine | None = None
         self.algorithm = "fcfs"
         self.quantum = 2
@@ -117,7 +108,6 @@ class SchedulerApp:
             style.map(f"{name}.Heading", background=[("active", theme.BORDER)])
             style.map(name, background=[("selected", theme.BORDER)])
         style.configure("Task.Treeview", rowheight=22)
-        # 任务表用 tag 上色，需要让 selected 状态也保留前景色
         style.map("Task.Treeview", foreground=[("selected", theme.TEXT)])
 
         style.configure("TNotebook", background=theme.BG_PANEL, borderwidth=0)
@@ -143,18 +133,15 @@ class SchedulerApp:
         body.rowconfigure(1, weight=2)
         body.columnconfigure(0, weight=1)
 
-        # 左上：任务列表
         table_card = ttk.Frame(body, style="Card.TFrame", padding=(10, 8))
         table_card.grid(row=0, column=0, sticky="nsew", pady=(0, 6))
         table_card.rowconfigure(1, weight=1)
         table_card.columnconfigure(0, weight=1)
         ttk.Label(table_card, text="任务列表", style="Section.TLabel").grid(
             row=0, column=0, sticky="w", pady=(0, 5))
-        # 接上选中回调：否则「修改」按钮永远不会因为选中某一行而启用
         self.table = TaskTable(table_card, on_select=lambda _tid: self._update_edit_buttons())
         self.table.grid(row=1, column=0, sticky="nsew")
 
-        # 左下：甘特图
         gantt_card = ttk.Frame(body, style="Card.TFrame", padding=(10, 8))
         gantt_card.grid(row=1, column=0, sticky="nsew")
         gantt_card.rowconfigure(1, weight=1)
@@ -164,7 +151,6 @@ class SchedulerApp:
         self.gantt = GanttChart(gantt_card)
         self.gantt.grid(row=1, column=0, sticky="nsew")
 
-        # 右：状态与结果
         self.panel = ReportPanel(body, on_pick_task=self._focus_task)
         self.panel.grid(row=0, column=1, rowspan=2, sticky="ns", padx=(8, 0))
         self.panel.configure(width=396)
@@ -213,7 +199,6 @@ class SchedulerApp:
         self.speed_scale.set(self.speed)
         self.speed_scale.pack(side="left")
 
-        # ---------------- 第二行：操作 ----------------
         bar = ttk.Frame(self.root, style="Toolbar.TFrame", padding=(10, 0, 10, 8))
         bar.grid(row=1, column=0, sticky="ew")
 
@@ -249,8 +234,6 @@ class SchedulerApp:
 
         self.algo_box.configure(values=[self._algorithm_label(k) for k in ALGORITHM_ORDER])
         self.algo_var.set(self._algorithm_label(self.algorithm))
-        # 初始算法不是 RR 时时间片应当直接禁用；否则用户会在 FCFS 下改时间片，
-        # 触发一次对结果毫无影响的引擎重置
         self.quantum_box.configure(
             state="readonly" if self.algorithm == "rr" else "disabled")
 
@@ -274,8 +257,7 @@ class SchedulerApp:
             except DataError as exc:
                 self.status.configure(text=f"跳过 {path.name}：{exc}")
                 continue
-            # 下拉框里带上扩展名：同一份数据常常同时有 .csv 与 .json 两个版本，
-            # 只用文件名的话两个条目会重名，后读到的会把先读到的覆盖掉
+            # 带上扩展名，避免同名 csv / json 在下拉框里冲突。
             self._datasets[f"{path.name}（{len(tasks)} 个任务）"] = path
 
         if not self._datasets:
@@ -283,7 +265,6 @@ class SchedulerApp:
             return
 
         self.dataset_box.configure(values=list(self._datasets))
-        # 默认载入任务书给的示例数据
         preferred = next((k for k in self._datasets if k.startswith("sample.csv")), None)
         self.dataset_box.set(preferred or next(iter(self._datasets)))
         self._load_dataset()
@@ -304,7 +285,6 @@ class SchedulerApp:
                  f"总运行时长 {sum(t.burst_time for t in self.tasks)} 个单位")
 
     def _refresh_task_views(self) -> None:
-        """任务定义变了之后重建表格与甘特图。"""
         self.table.set_tasks(self.tasks)
         self.gantt.set_tasks(self.tasks)
         self.panel.clear_result()
@@ -313,7 +293,7 @@ class SchedulerApp:
         self._update_edit_buttons()
 
     def _update_edit_buttons(self) -> None:
-        """只有"模拟开始前或重置后"才允许改任务数据。"""
+        """只有模拟开始前或重置后才能改任务数据。"""
         editable = "normal" if self._can_edit() else "disabled"
         self.add_button.configure(state=editable)
         self.remove_button.configure(state=editable)
@@ -325,7 +305,7 @@ class SchedulerApp:
             return False
         if self.engine is None:
             return True
-        return self.engine.now == 0        # 重置之后、还没开始推进
+        return self.engine.now == 0
 
     # ==================================================================
     # 参数变化
@@ -370,9 +350,7 @@ class SchedulerApp:
         self.engine = SimulationEngine(instances, scheduler)
         self.gantt.set_tasks(self.tasks)
         self.table.set_tasks(self.tasks)
-        # 上次的结果与对比表都必须一起清掉：换了算法、改了时间片、换过数据集
-        # 之后，旧结果已经不对应当前的选择，留着会误导，也会让「导出结果」
-        # 写出上一轮的数据
+        # 换了算法/时间片/数据集后，旧结果必须清掉。
         self.last_result = None
         self.panel.clear_result()
         self.panel.clear_comparison()
@@ -395,8 +373,8 @@ class SchedulerApp:
         self.run_button.configure(text="运行中…", state="disabled")
         self.pause_button.configure(state="normal")
         self.step_button.configure(state="disabled")
-        self._tick()                        # 先让动画跑起来（此时才设上 _job）
-        self._update_edit_buttons()         # 再按"正在运行"的状态刷新编辑按钮
+        self._tick()
+        self._update_edit_buttons()
 
     def _tick(self) -> None:
         if self.engine is None:
@@ -420,7 +398,7 @@ class SchedulerApp:
             self.status.configure(text=f"已暂停在 t = {self.engine.now}")
 
     def _single_step(self) -> None:
-        """推进一个模拟时间单位 —— 这正是任务书对"单步执行"的定义。"""
+        """推进一个模拟时间单位。"""
         if self.engine is None or self.engine.finished:
             return
         if self._job is not None:
@@ -430,7 +408,7 @@ class SchedulerApp:
         if self.engine.finished:
             self._finish()
         else:
-            self._update_edit_buttons()     # 已经推进过时间，不能再改任务数据了
+            self._update_edit_buttons()
             self.status.configure(text=f"单步：t = {self.engine.now}")
 
     def _finish(self) -> None:
@@ -447,11 +425,10 @@ class SchedulerApp:
                  f"响应 {result.avg_response:.2f}；换人 {result.context_switches} 次")
 
     def _stop_animation(self) -> None:
-        """中止动画并把按钮恢复成可再次开始的状态。
+        """中止动画并恢复按钮。
 
-        按钮的重置必须放在这里：切换算法、改时间片、换数据集、开始对比
-        等操作都会经由这个方法停下来，如果只在 _finish() 里恢复按钮，
-        动画进行中做上述任何一件事都会让「开始」永远停在禁用状态。
+        按钮重置必须放在这里：切换算法、改时间片、换数据集等操作都会经过
+        本方法，只在 _finish() 里恢复会让"开始"永久禁用。
         """
         if self._job is not None:
             self.root.after_cancel(self._job)
@@ -617,7 +594,7 @@ class SchedulerApp:
         self.status.configure(text=f"已从 {Path(path).name} 导入 {len(tasks)} 个任务")
 
     def _export_tasks(self) -> None:
-        """把当前任务表另存为 CSV（在界面上改完任务后可以留存下来）。"""
+        """把当前任务表另存为 CSV。"""
         if not self.tasks:
             messagebox.showinfo("没有任务", "任务列表是空的。", parent=self.root)
             return
@@ -668,7 +645,6 @@ class SchedulerApp:
         results: list[ScheduleResult] = []
         for key in ALGORITHM_ORDER:
             if key == "rr":
-                # 任务书要求比较 RR 在不同时间片下的表现
                 for quantum in RR_QUANTA:
                     result = simulate(self.tasks, key, quantum)
                     rows.append(self._comparison_row(result, f"RR q={quantum}"))
@@ -680,7 +656,6 @@ class SchedulerApp:
 
         best = min(range(len(rows)), key=lambda i: rows[i]["turnaround"])
         rows[best]["best"] = True
-        # 连同每个算法的完整结果一起交给面板：选中对比表的一行就能看到它的甘特图
         self.panel.show_comparison(rows, results)
         self.panel.show_tab("comparison")
 

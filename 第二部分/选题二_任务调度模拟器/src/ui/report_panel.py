@@ -1,12 +1,4 @@
-"""右侧信息面板：当前状态、统计结果、算法对比。
-
-三块内容自上而下排列：
-
-1. **当前状态** —— 模拟时间、正在运行的任务、就绪队列、完成进度。
-   任务书要求界面必须展示这三项（§3.2 第 3 条）。
-2. **统计结果** —— 平均周转 / 等待 / 响应时间，以及每个任务的明细。
-3. **算法对比** —— 同一组任务在三种算法（以及不同时间片）下的横向比较。
-"""
+"""右侧面板：当前状态、统计结果与算法对比。"""
 
 from __future__ import annotations
 
@@ -73,7 +65,6 @@ class ReportPanel(ttk.Frame):
         page.rowconfigure(1, weight=1)
         page.columnconfigure(0, weight=1)
 
-        # 汇总
         summary = _Card(page, "平均指标")
         summary.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         summary.body.columnconfigure(1, weight=1)
@@ -91,7 +82,6 @@ class ReportPanel(ttk.Frame):
             value.grid(row=row, column=col * 2 + 1, sticky="e", padx=(6, 14), pady=1)
             self._summary[key] = value
 
-        # 明细表
         card = _Card(page, "每个任务的统计")
         card.grid(row=1, column=0, sticky="nsew")
         card.body.rowconfigure(0, weight=1)
@@ -125,7 +115,6 @@ class ReportPanel(ttk.Frame):
         card.body.rowconfigure(0, weight=1)
         card.body.columnconfigure(0, weight=1)
 
-        # 时间片不再单列一列 —— 算法名里已经写成 "RR q=1" 了
         columns = ("algo", "turn", "wait", "resp", "switch", "idle")
         self._compare = ttk.Treeview(card.body, columns=columns, show="headings",
                                      height=10, style="Compare.Treeview")
@@ -141,7 +130,6 @@ class ReportPanel(ttk.Frame):
         self._compare.tag_configure("best", foreground=theme.SUCCESS)
         self._compare.bind("<<TreeviewSelect>>", self._show_comparison_gantt)
 
-        # 对比表下方：选中哪一行，就展示那个算法的甘特图
         preview = _Card(page, "所选算法的甘特图")
         preview.grid(row=2, column=0, sticky="nsew")
         preview.body.rowconfigure(0, weight=1)
@@ -154,7 +142,7 @@ class ReportPanel(ttk.Frame):
     # 对外接口
     # ==================================================================
     def show_state(self, snapshot: dict) -> None:
-        """刷新"当前状态"卡片。动画每一步都会调用。"""
+        """刷新"当前状态"卡片。"""
         running = snapshot.get("running")
         ready = snapshot.get("ready") or []
         names = "、".join(task.task_id for task in ready[:6])
@@ -195,12 +183,7 @@ class ReportPanel(ttk.Frame):
 
     def show_comparison(self, rows: list[dict],
                         results: list[ScheduleResult] | None = None) -> None:
-        """填充算法对比表，并准备好每行对应的甘特图。
-
-        每行形如 {'algo','turnaround','waiting','response','switches','idle','best'}；
-        ``results`` 与 ``rows`` 一一对应，选中某一行时用它来渲染甘特图 ——
-        任务书要求算法对比要同时展示"统计指标与甘特图"。
-        """
+        """填充对比表，并准备好每行对应的甘特图。"""
         self._compare.delete(*self._compare.get_children())
         self._comparison_results = list(results or [])
 

@@ -1,9 +1,4 @@
-"""结果展示面板。
-
-包含三块内容：本次搜索的统计数字、途经站点清单（含换乘指引）、
-以及三种算法的横向对比表。面板只负责"把已经算好的数据摆出来"，
-不参与任何计算。
-"""
+"""结果面板：统计数字、换乘指引与算法对比表。"""
 
 from __future__ import annotations
 
@@ -31,7 +26,7 @@ class ResultPanel(ttk.Frame):
     def __init__(self, master: tk.Misc) -> None:
         super().__init__(master, style="Panel.TFrame", padding=(10, 10))
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=3)      # 换乘指引在真实网络上可能有五六段
+        self.rowconfigure(1, weight=3)
         self.rowconfigure(2, weight=2)
 
         self._build_stats()
@@ -126,11 +121,7 @@ class ResultPanel(ttk.Frame):
                                 style="Warn.TLabel" if not route.found else "Dim.TLabel")
 
     def clear(self) -> None:
-        """清空与当前搜索结果相关的一切。
-
-        对比表也要一起清掉 —— 起点、终点或算法变了之后，表里那几行就
-        不再对应当下的选择了，留着会让人以为那就是本次查询的结果。
-        """
+        """清空结果；对比表也一起清，避免旧结果误导。"""
         for label in self._stats.values():
             label.configure(text="—")
         self._message.configure(text="")
@@ -138,7 +129,6 @@ class ResultPanel(ttk.Frame):
         self.clear_comparison()
 
     def show_itinerary(self, route: Route, graph: Graph | None) -> None:
-        """把路径渲染成"站名 + 乘坐线路"的清单。"""
         if not route.found:
             self._set_text("")
             return
@@ -172,11 +162,6 @@ class ResultPanel(ttk.Frame):
         self._text.configure(state="disabled")
 
     def show_comparison(self, rows: list[dict]) -> None:
-        """刷新算法对比表。
-
-        每行形如 {'algo','distance','minutes','transfers','settled','elapsed','best'}；
-        没有通路时 distance / minutes 传 None，表格里显示为 —。
-        """
         def cell(value, pattern: str) -> str:
             return "—" if value is None else pattern.format(value)
 

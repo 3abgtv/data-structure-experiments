@@ -1,12 +1,4 @@
-"""任务列表控件。
-
-以表格形式展示任务的属性和当前状态（任务书 §3.2 第 1 条的要求），
-并提供添加 / 修改 / 删除的入口。表格本身不校验数据，校验由调用方
-（`app.py` 里的对话框与 `loader.validate`）负责。
-
-动画进行中每推进一个时间单位就会刷新一次，所以这里只做**原地更新**
-（`item(iid, values=...)`），不重建整张表 —— 否则每次刷新都会闪一下。
-"""
+"""任务列表：展示任务属性与当前状态。"""
 
 from __future__ import annotations
 
@@ -39,8 +31,6 @@ class TaskTable(ttk.Frame):
         )
         for key, title, width, anchor in COLUMNS:
             self.tree.heading(key, text=title)
-            # 所有列都参与拉伸：只让某一列拉伸的话，它会把后面的列远远推开，
-            # 表格看起来就像错位了
             self.tree.column(key, width=width, minwidth=50, anchor=anchor, stretch=True)
 
         self.tree.tag_configure("running", background=theme.ROW_RUNNING_BG,
@@ -73,10 +63,9 @@ class TaskTable(ttk.Frame):
         self.refresh(tasks)
 
     def refresh(self, tasks: list[Task]) -> None:
-        """原地刷新剩余时长与状态（动画每一步都会调用）。
+        """原地刷新剩余时长与状态。
 
-        注意 tags 是**整组替换**的，所以这里要把斑马纹的 odd 标签重新拼上，
-        否则 set_tasks 铺好的隔行底色会在第一次刷新时全部丢掉。
+        tags 是整组替换的，刷新时要重新拼上斑马纹的 odd 标签。
         """
         for index, task in enumerate(tasks):
             if not self.tree.exists(task.task_id):
@@ -111,7 +100,6 @@ class TaskTable(ttk.Frame):
             self._on_select(self.selected_task_id())
 
     def focus_task(self, task_id: str | None) -> None:
-        """把某一任务选中（用于在统计表里点一行就跳到任务表）。"""
         if task_id and self.tree.exists(task_id):
             self.tree.selection_set(task_id)
             self.tree.see(task_id)

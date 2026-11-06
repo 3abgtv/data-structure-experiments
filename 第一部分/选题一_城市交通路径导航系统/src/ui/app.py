@@ -1,13 +1,4 @@
-"""主窗口：把图、求解器与各个视图组装起来，并负责搜索动画的调度。
-
-界面层在这里只做三件事：转发用户的输入、按节拍消费求解器产出的事件、
-把结果交给画布和面板渲染。所有算法逻辑都在 solver 里，窗口本身
-不含任何最短路径计算 —— 这正是任务书要求的模块划分。
-
-关于动画：搜索本身是瞬间完成的，"慢慢变色的过程"只是把求解器逐条
-yield 出来的事件按时间铺开。因此演示速度只影响观感，不影响任何
-调度结果或统计数字。
-"""
+"""主窗口：组装图、求解器与视图，并调度搜索动画。"""
 
 from __future__ import annotations
 
@@ -23,7 +14,7 @@ from . import theme
 from .canvas_view import NetworkView
 from .control_panel import ResultPanel
 
-TICK_MS = 24          # 动画节拍
+TICK_MS = 24
 
 
 class NavigationApp:
@@ -149,7 +140,6 @@ class NavigationApp:
         self.status.grid(row=3, column=0, sticky="ew")
 
     def _build_toolbar(self) -> None:
-        # 控件较多，分两行摆放：上行是"选什么"，下行是"做什么"
         bar = ttk.Frame(self.root, style="Toolbar.TFrame", padding=(10, 8, 10, 2))
         bar.grid(row=0, column=0, sticky="ew")
 
@@ -191,7 +181,6 @@ class NavigationApp:
         ttk.Button(bar, text="⇄", width=3, command=self._swap_endpoints).pack(
             side="left", padx=(4, 14))
 
-        # ---------------- 第二行：操作按钮 ----------------
         bar = ttk.Frame(self.root, style="Toolbar.TFrame", padding=(10, 0, 10, 8))
         bar.grid(row=1, column=0, sticky="ew")
 
@@ -246,8 +235,7 @@ class NavigationApp:
 
         labels = list(self._datasets)
         self.dataset_box.configure(values=labels)
-        # 默认加载站点最多的那张网
-        self.dataset_box.set(max(sizes, key=sizes.get))
+        self.dataset_box.set(max(sizes, key=sizes.get))   # 默认加载站点最多的网
         self._on_dataset_change()
 
     def _on_dataset_change(self) -> None:
@@ -267,13 +255,11 @@ class NavigationApp:
         self.source_box.configure(values=names)
         self.target_box.configure(values=names)
 
-        # 默认起终点：用"两次最远扫描"挑出一对距离很远、而且确实连通的站点
         self.source, self.target = self._pick_endpoints()
         self.source_var.set(self.graph.name_of(self.source))
         self.target_var.set(self.graph.name_of(self.target))
 
         self.view.load(self.graph)
-        # load() 会清空画布上的起终点标记，必须把刚选好的那对重新画上
         self.view.set_endpoints(self.source, self.target)
         self.panel.clear()
         self.panel.clear_comparison()
@@ -283,12 +269,7 @@ class NavigationApp:
                  f"{self.graph.edge_count} 段区间、{len(self.graph.transfer_stations())} 个换乘站")
 
     def _pick_endpoints(self) -> tuple[str, str]:
-        """挑一对"离得远且互相连通"的起终点作为初始演示。
-
-        做法是两次最远扫描：先从任意站出发找离它最远的站 A，再从 A 出发
-        找离 A 最远的站 B。第二次扫描限制在 A 的可达集合内，因此选出的
-        两点之间一定存在通路，不会一上来就摆出"两站不连通"的界面。
-        """
+        """两次最远扫描，挑一对距离远且连通的起终点。"""
         graph = self.graph
         vertices = list(graph.vertices)
         if len(vertices) < 2:
@@ -315,7 +296,7 @@ class NavigationApp:
         self._stop_animation()
         self.view.clear_search()
         self.view.set_endpoints(self.source, self.target)
-        self.panel.clear()          # 上一算法的结果已经不属于当前选择了
+        self.panel.clear()
 
     def _on_endpoint_change(self) -> None:
         self.source = self._name_to_id.get(self.source_var.get())
@@ -353,7 +334,6 @@ class NavigationApp:
         self.panel.clear()
 
     def _on_canvas_context(self, vid: str, x_root: int, y_root: int) -> None:
-        """站点右键菜单。"""
         if self.graph is None:
             return
         name = self.graph.name_of(vid)
@@ -376,14 +356,13 @@ class NavigationApp:
             menu.grab_release()
 
     # ==================================================================
-    # 网络编辑（动态增删）
+    # 网络编辑
     # ==================================================================
     def _delete_station(self, vid: str) -> None:
         if self.graph is None:
             return
         name = self.graph.name_of(vid)
-        # 先停动画再弹框：模态对话框会开启嵌套事件循环，
-        # 不先停下来的话，用户思考的这几秒里搜索动画仍在后台推进
+        # 先停动画：模态对话框会开嵌套事件循环。
         self._stop_animation()
         if not messagebox.askyesno(
             "删除站点",
@@ -472,7 +451,6 @@ class NavigationApp:
         dialog.bind("<Return>", lambda e: confirm())
         dialog.bind("<Escape>", lambda e: dialog.destroy())
         dialog.update_idletasks()
-        # 居中到主窗口
         x = self.root.winfo_rootx() + (self.root.winfo_width() - dialog.winfo_width()) // 2
         y = self.root.winfo_rooty() + (self.root.winfo_height() - dialog.winfo_height()) // 3
         dialog.geometry(f"+{max(x, 0)}+{max(y, 0)}")
@@ -485,14 +463,13 @@ class NavigationApp:
         return f"X{index}"
 
     def _after_graph_edit(self, message: str) -> None:
-        """图被修改之后统一刷新界面。"""
+        """图被修改后统一刷新界面。"""
         graph = self.graph
         self._name_to_id = {v.name: vid for vid, v in graph.vertices.items()}
         names = [v.name for v in graph.vertices.values()]
         self.source_box.configure(values=names)
         self.target_box.configure(values=names)
 
-        # 起点 / 终点可能刚好被删掉了，换成任意一个仍然存在的站点
         if self.source not in graph.vertices:
             self.source = next(iter(graph.vertices), None)
         if self.target not in graph.vertices:
@@ -558,7 +535,7 @@ class NavigationApp:
         except StopIteration:
             self._reset_buttons()
             return
-        except Exception as exc:                       # 算法内部出错时不让窗口崩掉
+        except Exception as exc:
             self._stop_animation()
             self._reset_buttons()
             messagebox.showerror("搜索出错", f"{type(exc).__name__}: {exc}")
@@ -593,11 +570,10 @@ class NavigationApp:
             self.status.configure(text="已暂停")
 
     def _stop_animation(self) -> None:
-        """中止正在进行的搜索动画，并把按钮恢复成可再次开始的状态。
+        """中止动画并恢复按钮。
 
-        按钮的重置必须放在这里：切换算法、改起终点、点画布选站、开始对比
-        等操作都会经由这个方法停下来，如果只在 _finish() 里恢复按钮，
-        动画进行中做上述任何一件事都会让"开始搜索"永远停在禁用状态。
+        按钮重置必须放在这里：切换算法、改起终点等操作都会经过本方法，
+        只在 _finish() 里恢复会让"开始搜索"永久禁用。
         """
         if self._job is not None:
             self.root.after_cancel(self._job)

@@ -1,23 +1,4 @@
-"""数据进出层：从文件读任务、把结果写回文件。
-
-支持两种任务数据格式，都来自外部文件，程序中不含硬编码的任务数据。
-
-**CSV**（推荐，任务书给的就是这个格式）::
-
-    task_id,name,arrival_time,burst_time,priority
-    T1,任务A,0,5,2
-    T2,任务B,1,3,1
-
-**JSON**::
-
-    {"name": "示例数据",
-     "tasks": [{"task_id": "T1", "name": "任务A",
-                "arrival_time": 0, "burst_time": 5, "priority": 2}]}
-
-无论哪种格式，读进来都要过一遍 `validate()` —— 任务书明确要求检查
-"重复编号、负数时间、零运行时长"等非法输入，而且这些检查必须发生在
-模拟开始之前。
-"""
+"""数据层：CSV / JSON 读写、字段校验与结果导出。"""
 
 from __future__ import annotations
 
@@ -27,12 +8,9 @@ from pathlib import Path
 
 from .models import ScheduleResult, Task
 
-# 任务书对属性的取值要求
 REQUIRED_FIELDS = ("task_id", "name", "arrival_time", "burst_time", "priority")
 
-# 到达时刻的上限。模拟是逐时间单位推进的，一个 100 万的到达时刻意味着
-# 时钟要先空转 100 万次才能开始干活；真实的教学数据远到不了这个量级，
-# 设个上限可以挡住手滑敲进去的异常值，也保证引擎不会碰到推进步数上限。
+# 逐时间单位模拟，到达时刻过大只会让时钟空转。
 MAX_ARRIVAL = 1_000_000
 
 
@@ -40,12 +18,9 @@ class DataError(ValueError):
     """任务数据不合法。"""
 
 
-# ----------------------------------------------------------------------
-# 校验
-# ----------------------------------------------------------------------
 def _as_int(value, what: str):
-    """把输入转成整数；不是整数就抛出 DataError 而不是 ValueError。"""
-    if isinstance(value, bool):                    # bool 是 int 的子类，要挡掉
+    """转成整数；bool 是 int 的子类，要单独挡掉。"""
+    if isinstance(value, bool):
         raise DataError(f"{what}必须是整数，实际为 {value!r}")
     if isinstance(value, int):
         return value
@@ -63,11 +38,7 @@ def _as_int(value, what: str):
 
 
 def validate(rows: list[dict], allow_duplicate_names: bool = True) -> list[Task]:
-    """逐条校验并转换成 Task 列表。
-
-    Raises:
-        DataError: 出现重复编号、空名称、负数时间、零运行时长等非法输入。
-    """
+    """逐条校验并转换成 Task 列表。"""
     tasks: list[Task] = []
     seen: dict[str, int] = {}
 
@@ -119,13 +90,10 @@ def check_quantum(value) -> int:
     return quantum
 
 
-# ----------------------------------------------------------------------
-# 读取
-# ----------------------------------------------------------------------
 def load_csv(path: str | Path) -> list[Task]:
     path = Path(path)
     try:
-        # utf-8-sig：兼容 Excel 另存为 CSV 时写在开头的 BOM
+        # utf-8-sig 兼容 Excel 另存 CSV 时写在开头的 BOM。
         with path.open(encoding="utf-8-sig", newline="") as handle:
             rows = [row for row in csv.DictReader(handle)
                     if any((v or "").strip() for v in row.values())]
@@ -177,10 +145,7 @@ RESULT_HEADER = [
 
 
 def export_result(result: ScheduleResult, path: str | Path) -> Path:
-    """把一次模拟的统计结果写成 CSV。
-
-    文件末尾追加三行平均值，方便直接拿去填报告里的对比表。
-    """
+    """把统计结果写成 CSV，末尾追加平均值。"""
     path = Path(path)
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.writer(handle)
@@ -200,7 +165,7 @@ def export_result(result: ScheduleResult, path: str | Path) -> Path:
 
 
 def export_tasks(tasks: list[Task], path: str | Path) -> Path:
-    """把当前任务表写回 CSV（界面上改完任务后另存）。"""
+    """把当前任务表写回 CSV。"""
     path = Path(path)
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.writer(handle)

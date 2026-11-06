@@ -1,26 +1,4 @@
-"""数据加载层：从外部文件读入站点与线路，对应任务书"地图加载与存储"模块。
-
-支持两种外部格式，数据一律来自文件，程序中不含任何硬编码的网络数据。
-
-1) JSON（推荐，一个文件装下整张网）::
-
-       {
-         "city": "星城",
-         "stations": [{"id": "S001", "name": "中央广场", "x": 0.0, "y": 0.0}, ...],
-         "lines": [
-           {"id": "L1", "name": "1 号线", "color": "#E4002B",
-            "speed": 45, "detour": 1.10, "stations": ["S001", "S002", ...]},
-           ...
-         ]
-       }
-
-2) 纯文本（一对 .txt 文件，便于手工编辑）::
-
-       stations.txt   每行： id,name,x,y
-       lines.txt      每行： line_id,line_name,color,speed,detour,S001>S002>S003
-
-   两种文件均以 # 开头的行为注释，空行忽略。
-"""
+"""数据加载：从 JSON 或 TXT 构建图，并校验数据不变量。"""
 
 from __future__ import annotations
 
@@ -41,20 +19,8 @@ class DataError(ValueError):
     """数据文件格式或内容不合法。"""
 
 
-# ----------------------------------------------------------------------
-# 数值校验
-#
-# 三个算法各自依赖一条数据不变量，一旦被破坏就会**静默**给出错误答案，
-# 而不是报错，所以必须在数据入口处挡住：
-#
-#   * 坐标必须是有限数 —— 含 NaN 时松弛比较 `candidate < dist.get(...)`
-#     恒为 False，可达的站点会被误判成不可达；
-#   * 速度必须为正 —— 否则算乘车时间时除零；
-#   * 绕行系数必须 ≥ 1 —— 它保证"边长 ≥ 两站直线距离"，这正是 A* 启发
-#     函数可采纳的全部依据（见 models.Vertex.straight_distance_to）；
-#     系数小于 1 会让 h 高估真实代价、A* 返回次优解，取负值更会让边权
-#     变负，直接破坏 Dijkstra 的非负权前提。
-# ----------------------------------------------------------------------
+# 三条不变量一旦被破坏，算法会静默算错而不是报错：
+# 坐标有限、速度为正、绕行系数 >= 1（A* 可采纳的前提）。
 def _finite(value, what: str) -> float:
     try:
         number = float(value)
@@ -84,9 +50,6 @@ def _detour(value, what: str) -> float:
     return number
 
 
-# ----------------------------------------------------------------------
-# JSON
-# ----------------------------------------------------------------------
 def load_json(path: str | Path) -> Graph:
     path = Path(path)
     try:
@@ -140,9 +103,6 @@ def load_json(path: str | Path) -> Graph:
     return graph
 
 
-# ----------------------------------------------------------------------
-# 纯文本
-# ----------------------------------------------------------------------
 def _rows(path: Path) -> list[list[str]]:
     if not path.exists():
         raise DataError(f"找不到文件：{path}")
@@ -157,7 +117,7 @@ def _rows(path: Path) -> list[list[str]]:
 
 
 def load_txt(stations_path: str | Path, lines_path: str | Path) -> Graph:
-    """从一对 .txt 文件构建图。"""
+    """从 stations.txt 与 lines.txt 构建图。"""
     stations_path, lines_path = Path(stations_path), Path(lines_path)
     graph = Graph()
 
@@ -195,21 +155,13 @@ def load_txt(stations_path: str | Path, lines_path: str | Path) -> Graph:
     return graph
 
 
-# ----------------------------------------------------------------------
-# 统一入口
-# ----------------------------------------------------------------------
 def load_graph(path: str | Path, lines_path: str | Path | None = None) -> Graph:
-    """按扩展名自动选择加载方式。
-
-    load_graph("data/metro/network.json")               -> JSON
-    load_graph("data/metro/stations.txt", "lines.txt")  -> TXT
-    """
+    """按扩展名选择加载方式。"""
     path = Path(path)
     if lines_path is not None:
         return load_txt(path, lines_path)
     if path.suffix.lower() == ".json":
         return load_json(path)
     if path.suffix.lower() == ".txt":
-        # 只给了一个 txt 时，约定同目录下的 stations.txt / lines.txt
         return load_txt(path.parent / "stations.txt", path.parent / "lines.txt")
     raise DataError(f"不支持的文件类型：{path.suffix}")

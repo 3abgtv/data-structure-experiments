@@ -1,13 +1,4 @@
-"""网络图画布（View）。
-
-职责边界：它只回答"怎么画"，不知道任何算法细节 —— 从外部接收一张
-Graph 和当前的搜索状态（哪些站点已被确定、哪些还在前沿、最终路径是
-什么），再把数据映射成图元。这正是任务书要求的
-"图结构 / 算法引擎 / 界面逻辑解耦"在界面侧的落点。
-
-坐标系：图的坐标以 km 为单位、y 轴向上；屏幕坐标以像素为单位、y 轴向下。
-两者之间用一个仿射变换连接，缩放与平移都只改这个变换，不动数据。
-"""
+"""网络图画布：坐标变换、缩放平移、路径高亮。"""
 
 from __future__ import annotations
 
@@ -34,7 +25,7 @@ def _parse_color(color: str) -> tuple[int, int, int] | None:
 
 
 def _luma(rgb: tuple[int, int, int]) -> float:
-    """感知亮度（Rec. 709 权重），0 ~ 255。"""
+    """Rec. 709 感知亮度，0 ~ 255。"""
     r, g, b = rgb
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
@@ -42,9 +33,8 @@ def _luma(rgb: tuple[int, int, int]) -> float:
 def tone(color: str, target: float) -> str:
     """把颜色亮度调向目标值，色相保持不变。
 
-    浅色主题下只压暗过亮的颜色（黄色线路在白底上原本几乎看不见）；
-    深色主题下只提亮过暗的颜色。两种情况都只动 HLS 的明度通道，不会
-    像等比放大 RGB 那样把某个通道打爆、变成 #ff00ff 这种假色。
+    浅色主题只压暗过亮色，深色主题只提亮过暗色；只动 HLS 明度通道，
+    避免等比放大 RGB 产生假色。
     """
     rgb = _parse_color(color)
     if rgb is None:
@@ -58,13 +48,13 @@ def tone(color: str, target: float) -> str:
             return color if color.startswith("#") else f"#{color}"
     r, g, b = (ch / 255.0 for ch in rgb)
     h, _l, s = colorsys.rgb_to_hls(r, g, b)
-    s = min(1.0, s * 1.08)          # 明度变化后人眼会觉得"发灰"，补一点饱和度
+    s = min(1.0, s * 1.08)
     r, g, b = colorsys.hls_to_rgb(h, target / 255.0, s)
     return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
 
 
 class NetworkView(tk.Canvas):
-    """站点网络的可视化画布，支持缩放、平移与点击选站。"""
+    """站点网络的可视化画布。"""
 
     MIN_SCALE = 1.5
     MAX_SCALE = 200.0
@@ -83,32 +73,26 @@ class NetworkView(tk.Canvas):
         self._scale = 10.0
         self._ox = 0.0
         self._oy = 0.0
-        # 用户还没手动缩放/平移过时，窗口尺寸变化后自动重新铺满
         self._auto_fit = True
 
-        # 图元索引：数据 -> canvas item id，便于原地改属性而不整体重画
         self._line_items: dict[str, int] = {}
         self._route_items: list[int] = []
         self._station_items: dict[str, int] = {}
         self._label_items: dict[str, int] = {}
 
-        # 搜索状态
         self._settled: set[str] = set()
         self._frontier: set[str] = set()
         self._path_nodes: list[str] = []
-        self._path_segments: list[tuple[str, str, str]] = []   # (from, to, line_id)
+        self._path_segments: list[tuple[str, str, str]] = []
         self._source: str | None = None
         self._target: str | None = None
-        # 路径算完后的"结果态"：没走到的站点压暗，让结果自己跳出来
         self._show_result = False
 
-        # 交互回调：on_pick(站点 ID, 鼠标按键)；on_context(站点 ID, 屏幕 x, 屏幕 y)
         self.on_pick: Callable[[str, str], None] | None = None
         self.on_context: Callable[[str, int, int], None] | None = None
 
         self._press_pos: tuple[int, int] | None = None
         self._dragged = False
-        # 标签避让的结果只跟缩放有关；平移时相对位置不变，不必重算
         self._labels_dirty = True
 
         self.bind("<Configure>", self._on_resize)
@@ -131,7 +115,7 @@ class NetworkView(tk.Canvas):
         return (sx - self._ox) / self._scale, (self._oy - sy) / self._scale
 
     def fit(self) -> None:
-        """把整张网络缩放到刚好铺满画布。"""
+        """把整张网络缩放到铺满画布。"""
         if self.graph is None or self.graph.vertex_count == 0:
             return
         width = max(self.winfo_width(), 240)
@@ -150,19 +134,17 @@ class NetworkView(tk.Canvas):
                 self.MAX_SCALE,
             ),
         )
-        # 让图心落在画布中心
         self._ox = width / 2 - (min_x + max_x) / 2 * self._scale
         self._oy = height / 2 + (min_y + max_y) / 2 * self._scale
         self._labels_dirty = True
         self._layout()
 
     def reset_view(self) -> None:
-        """回到"整张网铺满画布"的状态，并恢复自动适配。"""
         self._auto_fit = True
         self.fit()
 
     def _zoom_at(self, sx: float, sy: float, factor: float) -> None:
-        """以鼠标所在位置为锚点缩放。"""
+        """以鼠标位置为锚点缩放。"""
         new_scale = max(self.MIN_SCALE, min(self._scale * factor, self.MAX_SCALE))
         if abs(new_scale - self._scale) < 1e-9:
             return
@@ -197,7 +179,6 @@ class NetworkView(tk.Canvas):
         if graph is None:
             return
 
-        # --- 线路折线 ---
         for lid, line in graph.lines.items():
             if len(line.stations) < 2:
                 continue
@@ -210,7 +191,6 @@ class NetworkView(tk.Canvas):
                 capstyle=tk.ROUND, joinstyle=tk.ROUND, tags=("line", lid),
             )
 
-        # --- 站点 ---
         for vid, v in graph.vertices.items():
             sx, sy = self.to_screen(v.x, v.y)
             radius = self._radius_of(vid)
@@ -220,7 +200,6 @@ class NetworkView(tk.Canvas):
                 tags=("station", vid),
             )
 
-        # --- 站名 ---
         for vid, v in graph.vertices.items():
             sx, sy = self.to_screen(v.x, v.y)
             self._label_items[vid] = self.create_text(
@@ -236,16 +215,13 @@ class NetworkView(tk.Canvas):
             radius = theme.TRANSFER_RADIUS
         else:
             radius = theme.STATION_RADIUS
-        # 结果态把路径上的站点缩成小铆钉：沿线站点沿用了平时的大圆点
-        # 时，会把高亮线切成一串白点，线路颜色就看不出来了。起终点
-        # 保持原尺寸，否则一眼找不到两头。
+        # 结果态把路径站点缩成小铆钉，避免白点切断彩色路径；起终点保持原尺寸。
         if self._show_result and vid in self._path_nodes \
                 and vid not in (self._source, self._target):
             return theme.PATH_STATION_RADIUS
         return radius
 
     def _layout_stations(self) -> None:
-        """按当前半径重排站点圆（结果态切换时站点大小会变）。"""
         graph = self.graph
         if graph is None:
             return
@@ -258,7 +234,7 @@ class NetworkView(tk.Canvas):
             self.coords(item, sx - radius, sy - radius, sx + radius, sy + radius)
 
     def _layout(self) -> None:
-        """缩放 / 平移后重算所有图元的屏幕坐标。"""
+        """缩放/平移后重算所有图元的屏幕坐标。"""
         graph = self.graph
         if graph is None:
             return
@@ -316,7 +292,6 @@ class NetworkView(tk.Canvas):
         self._update_label_visibility()
 
     def show_route(self, route: Route) -> None:
-        """把最终路径铺到画布上。"""
         self._path_nodes = list(route.path) if route.found else []
         self._path_segments = []
         self._show_result = route.found
@@ -331,12 +306,7 @@ class NetworkView(tk.Canvas):
         self._update_label_visibility()
 
     def _update_line_emphasis(self) -> None:
-        """路径确定后把底图线路整体压暗，让结果自己"跳"出来。
-
-        结果态不再保留"路径经过的线路"整条彩色：一条腿可能只用到某条
-        线路的一小段，整条线亮着反而和路径抢注意力。路径本身由
-        路线图层按区段重新着色，线路身份不会丢。
-        """
+        """路径确定后压暗底图线路，让结果跳出来。"""
         graph = self.graph
         if graph is None:
             return
@@ -357,12 +327,7 @@ class NetworkView(tk.Canvas):
         self._route_items.clear()
 
     def _route_runs(self) -> list[tuple[str, list[str]]]:
-        """把路径拆成"同一线路上的连续区段"。
-
-        同一条腿内的相邻区间合成一条折线再画：若逐区间画，各层（光晕
-        与深色缝隙）会在每个站点处互相覆盖，连接点冒出一串白色圆环，
-        看起来像路径被白点切断了。
-        """
+        """把路径拆成同一线路上的连续区段，避免逐段绘制产生白色圆环。"""
         runs: list[tuple[str, list[str]]] = []
         for a, b, lid in self._path_segments:
             if runs and runs[-1][0] == lid and runs[-1][1][-1] == a:
@@ -372,12 +337,9 @@ class NetworkView(tk.Canvas):
         return runs
 
     def _redraw_route(self) -> None:
-        """重画路径高亮：轮廓 + 底色缝隙 + 调过亮度的线路色 + 高光。
+        """按层绘制路径高亮：轮廓 → 底色缝 → 线路色芯。
 
-        线路本色和底图的对比度并不总够（深色底图上的深色线、浅色底图
-        上的亮黄线都看不清）；这里按主题把亮度调离危险区，并在外面套
-        一圈同色系的轮廓，无论算出哪条线，结果都能从密密麻麻的站点里
-        跳出来。
+        必须按层而不是按线路绘制，否则换乘站处会出现圆环。
         """
         self._destroy_route_items()
         graph = self.graph
@@ -398,11 +360,6 @@ class NetworkView(tk.Canvas):
             line = graph.lines.get(lid)
             runs.append((coords, line.color if line else theme.ACCENT))
 
-        # 按层而不是按线路绘制：先把所有光晕铺完，再统一铺深色缝隙、色芯
-        # 和高光。若一条线画完四层再画下一条，换乘站处后一条线的深色
-        # 缝隙会在换乘点上啃出一个个圆环。
-        # 深色主题在最亮的一档上再叠一道同色高光；浅色主题不再加白线 ——
-        # 白底上它只会把彩芯又切成两条平行线，看起来像"双轨"。
         halo = (lambda c: theme.PATH_OUTLINE if theme.PATH_OUTLINE
                 else tone(c, theme.PATH_HALO_MIN_LUMA))
         layer_specs = [
@@ -421,8 +378,6 @@ class NetworkView(tk.Canvas):
                     capstyle=tk.ROUND, joinstyle=tk.ROUND, tags=("route",),
                 ))
 
-        # 路径压在底图线路之上；站点再压回路径之上 —— 结果态的路径站点
-        # 已缩成小铆钉，不会再变成一串白球，但沿线站点的位置仍看得见。
         for item in self._route_items:
             self.tag_raise(item)
         self.tag_raise("station")
@@ -470,13 +425,7 @@ class NetworkView(tk.Canvas):
         return not (a[2] < b[0] or a[0] > b[2] or a[3] < b[1] or a[1] > b[3])
 
     def _update_label_visibility(self) -> None:
-        """决定哪些站名该显示出来。
-
-        真实网络的中心城区站点极密，把站名统统画出来会糊成一团。这里
-        按重要性排序（起点终点 → 结果路径上的站 → 换乘站 → 其余），
-        依次尝试放标签，与已放下的标签矩形重叠的就直接隐藏。缩放级别
-        决定候选范围，碰撞检测决定最终谁留下。
-        """
+        """按重要性放置站名，重叠的隐藏。"""
         graph = self.graph
         if graph is None:
             return
@@ -520,7 +469,6 @@ class NetworkView(tk.Canvas):
     def _on_resize(self, event: tk.Event) -> None:
         if self.graph is None:
             return
-        # 首次布局完成、或用户没手动调过视图时，跟着窗口重新铺满
         if self._auto_fit:
             self.fit()
         else:
@@ -556,17 +504,11 @@ class NetworkView(tk.Canvas):
             self.on_pick(vid, "left")
 
     def _on_double_click(self, event: tk.Event) -> None:
-        """双击空白处回到全览。
-
-        双击**站点**时不触发 —— 那多半只是想选这个站。真实的双击会先产生
-        一次完整的按下与抬起，若这时的双击又去重置视图，用户就会看到
-        "选中的站没变，画面却跳走了"。
-        """
+        """双击空白回到全览；双击站点视为选站，不重置视图。"""
         if self._station_at(event.x, event.y) is None:
             self.reset_view()
 
     def _on_right_press(self, event: tk.Event) -> None:
-        """右键弹出上下文菜单（设为终点 / 删除站点等）。"""
         vid = self._station_at(event.x, event.y)
         if vid and self.on_context:
             self.on_context(vid, event.x_root, event.y_root)
